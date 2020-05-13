@@ -1,5 +1,5 @@
 /**
- * Created by alex on 26.05.2017.
+ * Created by Oleksandr Barabanov on 26.05.2017
  */
 import React, { Component } from 'react';
 
@@ -9,8 +9,6 @@ export default class Autocomplete extends Component {
     super(props);
 
     this.state = {
-      originalOptions: [],
-      chunkedOptions: [],
       suggestedOptions: [],
       txtInput: ''
     };
@@ -23,72 +21,34 @@ export default class Autocomplete extends Component {
     json
       .then(data => data.json())
       .then(arr => {
-        arr = arr.sort();
         console.info(`Loaded ${arr.length} items.`);
-        this.setState({
-          originalOptions: arr
-        });
         this.prepareData(arr);//.slice(0, 1000));
       })
       .catch(err => console.error(err));
   }
 
-  prepareData(sortedArray) {
+  prepareData(arr) {
+    const chunksByLetter = new Map();
 
-    let chunksByLetter = {},
-      prevLetter = '',
-      arrChunk = [];
-
-    /*
-    //  for testing only
-    let numChunks = 0,
-      totally = 0;
-    */
-
-    for (let index = 0; index < sortedArray.length; index++) {
-
-      const item = sortedArray[index]; // string value
+    for (let item of arr) { // string value
       const letter = item[0].toLowerCase();
-      //console.log(`Letter: ${letter} prevLetter: ${prevLetter}`);
 
-      if (letter !== prevLetter) {  
-        /*      
-        // testing
-        totally += arrChunk.length; 
-        numChunks++;                
-        //console.log(`'${prevLetter}' chunk length: ${arrChunk.length}`);
-        */
-
-        chunksByLetter[prevLetter] = arrChunk;
-        prevLetter = letter;
-        arrChunk = [];
+      if (chunksByLetter.has(letter)) {
+        const chunk = chunksByLetter.get(letter);
+        chunk.push(item);
+      } else {
+        chunksByLetter.set(letter, [item]);
       }
-
-      arrChunk.push(item);
-
     }
-
-    this.setState({ 
-      chunkedOptions: chunksByLetter,
-      originalOptions: [] // to reduce memory consumption, drop original array as it's not needed anymore.
-    });
-
-    //  testing
-    /*
-    console.log(`Totally ${totally} items in ${numChunks} chunks.`); // in 27 chunks. - that's fine, first is ''/zero one.
-    console.log(`'a' chunk length: ${chunksByLetter.a.length}`);
-    console.log(`'a' chunk first: ${chunksByLetter.a[0]}`);
-    console.log(`'z' chunk length: ${chunksByLetter.z.length}`);
-    console.log(`'z' chunk last: ${chunksByLetter.z[chunksByLetter.z.length - 1]}`);
-    console.log(`'z' chunk: ${chunksByLetter.z}`);
-    */
-
+    //console.log('chunked:', chunksByLetter);
+    this.chunkedOptions = chunksByLetter;
   }
 
   /**
    * Autocomplete activation:
-   * - ignore single symbol
-   * - start filtering after 2 or more symbols
+   * - start filtering after a symbol typed
+   * 
+   * TODO: improvement - set small delay before input procession, if typed really fast
    * 
    * @param {*} event 
    */
@@ -96,26 +56,21 @@ export default class Autocomplete extends Component {
     const input = event.target.value;
     this.setState({ txtInput: input });
 
-    //  TODO: improvement - set small delay before input procession, if typed really fast
-
-    if (input.length <= 1) {
-      //  it doesn't make any sense trying to autocomplete after single char has been entered.
+    if (input.length < 1) {
       event.preventDefault();
       this.setState({ suggestedOptions: [] }); // empty suggestions
       return;
     }
-    //console.log(`processing: ${input}`);
     this.filterOptions( input );
   }
 
   filterOptions( input ) {
     const firstLetter = input[0].toLowerCase();
-    const chunk = this.state.chunkedOptions[firstLetter];
+    const chunk = this.chunkedOptions.get(firstLetter) || [];
     const found = chunk.filter(item =>
-      item.toLowerCase().startsWith(input.toLowerCase()) // > that start with the prefix typed so far.
-      //item.toLowerCase().indexOf(input.toLowerCase()) > -1 // includes
+      item.toLowerCase().startsWith(input.toLowerCase()) // starting with the prefix typed so far
     );
-    console.log(`found matches: ${found.length} of chunk size: ${chunk.length}`);
+    console.log(`found matches: ${found.length} in '${firstLetter}' chunk of ${chunk.length}`);
 
     this.setState({
       suggestedOptions: found
@@ -123,9 +78,8 @@ export default class Autocomplete extends Component {
   }
 
   render() {
-
     const options = this.state.suggestedOptions
-      .slice(0, 5) // to show not more than 5 suggestions.
+      .slice(0, 10) // to show not more than 10 suggestions.
       .map((value, index) =>
         <option key={index} value={value} />
       );
@@ -134,11 +88,10 @@ export default class Autocomplete extends Component {
       <div>
         <br />Type here:<br />
 
-        <input id="txtInput" type="text"
+        <input id="txtInput" type="text" placeholder="bird name"
           autoComplete="on" list="suggested"
           value={this.state.txtInput}
-          onInput={this.handleInput}
-        />
+          onInput={this.handleInput} />
 
         <datalist id="suggested">
           {options}
